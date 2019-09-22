@@ -1,23 +1,25 @@
 use std::collections::HashMap;
-use std::io::BufWriter;
-use serde_json;
+use serde::{Serialize, Deserialize};
 
+#[derive(Serialize, Deserialize)]
 enum CardType {
 	Particle,
 	Noun,
 	Verb,
 }
 
+#[derive(Serialize, Deserialize)]
 struct Variation {
 	name: String,
 	value: String,
 }
 
+#[derive(Serialize, Deserialize)]
 struct Card {
 	// there may be many values for a single card
 	// e.g. numbers or years, and they'll all be collectd as values
 	// they should all resolve to the same 'key'
-	variations: Vec<Value>,
+	variations: Vec<Variation>,
 	// a list of dependent card keys
 	dependencies: Vec<String>,
 	// type
@@ -25,91 +27,27 @@ struct Card {
 	// how long is the current time gap
 	duration: std::time::Duration,
 	// duration + the current time
-	next_time: std::time::Instant,
+	next_time_s: i64,
 }
 
-type CardMap = HashMap<String,Card>;
-
-fn read_progress(cards:&mut CardMap) {
-
-	// match std::fs::File::open()
-
+#[derive(Serialize, Deserialize)]
+struct Cards {
+	cards: HashMap<String, Card>
 }
 
-fn save_progress(cards:&CardMap) {
+fn read_progress(cards:&mut Cards) {
 
-	match std::fs::File::create("cards.json") {
-		Ok(file) => {
-			// save all of the data to disk
-			let writer = BufWriter::new(file);
+	// match std::fs::read_to_string("cards.json") {
+	// 	Ok(contents) => {
+	// 		cards = serde_json::from_str(&contents).unwrap();
+	// 	}
+	// }
+}
 
-			let keys:Vec<String> = cards.keys().collect().sort();
+fn save_progress(cards:&Cards) {
 
-			writer.write("{\n");
-
-			let mut first = true;
-
-			for key in keys {
-				let card = cards[key];
-
-				if !first {
-					writer.write(",");
-				} else {
-					first = false;
-				}
-
-				writer.write("\n\t\"");
-				writer.write(key);
-				writer.write("\": {");
-
-				writer.write("\n\t\t\"variations\": [");
-
-				let mut first_variation = true;
-				for variation in card.variations {
-
-					if !first_variation {
-						writer.write(",");
-
-					} else {
-
-						first_variation = false;
-					}
-
-					writer.write("\n\t\t\t{ \"name\": \"");
-					writer.write(variation.name);
-					writer.write("\", \"value\": \"");
-					writer.write(variation.value);
-					writer.write("\" }");
-				}
-
-				writer.write("\n\t\t],");
-
-				writer.write("\n\t\t\"dependencies\": [");
-
-				let mut first_dependency = true;
-				for dependency in card.dependencies {
-
-					if !first_dependency {
-						writer.write(",");
-					} else {
-						first_dependency = false;
-					}
-
-					writer.write("\n\t\t\"dependency\"")
-				}
-
-				writer.write("\n\t}");
-			}
-
-			writer.write("}");
-
-		},
-		Err(err) => {
-			println!("Unable to save progress: {}", err);
-		}
-	}
-
-
+	let contents = serde_json::to_string(&cards).unwrap();
+	std::fs::write("cards.json", contents).unwrap();
 }
 
 fn is_korean(c:char) -> bool {
@@ -117,27 +55,26 @@ fn is_korean(c:char) -> bool {
 	c >= 0xAC00 && c <= 0xD7AF
 }
 
-fn make_key(text:&str) -> Option<String> {
-	text.chars().filter(is_korean).to_str()
+// fn make_key(text:&str) -> String {
+// 	text.chars().filter(is_korean).collect()
+// }
+
+// fn add_card(cards:&mut Cards, ty:CardType, text:&str, example:&str) {
+
+// 	let key = make_key(text);
+
+// 	if !cards.cards.contains_key(&key) {
+// 		cards.cards.insert(key, make_card(text.to_string(), example.to_string(), vec![]));
+// 	}
+// }
+
+fn add_translated_card(card_map:&mut HashMap<String, Card>, ty:CardType, text:&str, example:&str, translation:&str) {
+
+	// let key = make_key(text);
+
 }
 
-fn add_card(card_map:&mut CardMap, ty:Type, text:&str, example:&str) {
-
-	if let Some(key) = make_key(text) {
-		if !card_map.contains_key(key) {
-			card_map.insert(key, make_card(text.to_string(), example.to_string(), vec![]));
-		}
-	}
-}
-
-fn add_translated_card(card_map:&mut CardMap, ty:Type, text:&str, example:&str, translation:&str) {
-
-	let key = make_key(text);
-
-
-}
-
-fn parse_file(data:String, card_map:&mut CardMap) {
+fn parse_file(data:String, card_map:&mut HashMap<String, Card>) {
 	// parse data into sentances
 
 	// want to strip (English text) completely
@@ -202,10 +139,10 @@ fn parse_file(data:String, card_map:&mut CardMap) {
 			// find all of the particles
 			if word.ends_with('은') {
 				// add
-				add_translated_card(card_map, CardType::Particle, "은", word, "~은 Noun Topic Particle");
+				add_translated_card(card_map, CardType::Particle, "은", &word, "~은 Noun Topic Particle");
 
-				let noun = word.chars().take(word.chars().count()-1).as_str();
-				add_card(card_map, CardType::Noun, noun, word);
+				// let noun = word.chars().take(word.chars().count()-1).as_str();
+				// add_card(card_map, CardType::Noun, noun, word);
 			}
 
 			println!("{}", word);
@@ -213,9 +150,9 @@ fn parse_file(data:String, card_map:&mut CardMap) {
 	}
 }
 
-fn parse_files() -> CardMap {
+fn parse_files() -> Cards {
 
-	let mut res = CardMap::new();
+	let mut cards = HashMap::<String, Card>::new();
 
 	// read all of the .txt files in data
 	for entry in std::fs::read_dir("data").unwrap() {
@@ -231,11 +168,11 @@ fn parse_files() -> CardMap {
 
 			let contents = std::fs::read_to_string(entry.path()).unwrap();
 
-			parse_file(contents, &mut res);
+			parse_file(contents, &mut cards);
 		}
 	}
 
-	res
+	Cards { cards }
 }
 
 fn main() {
